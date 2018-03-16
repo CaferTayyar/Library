@@ -16,6 +16,10 @@ import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.jdbc.core.namedparam.SqlParameterSource;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.TransactionStatus;
+import org.springframework.transaction.support.DefaultTransactionDefinition;
 
 /**
  *
@@ -24,13 +28,7 @@ import org.springframework.stereotype.Service;
 @Service
 public class BookDAOImp implements BookDAO {
 
-//    @Autowired
-//    private DataSource dataSource;
-    @Autowired
-    public void setDataSource(DataSource dataSource) {
-        namedParameterJdbcTemplate = new NamedParameterJdbcTemplate(dataSource);
-    }
-
+    private PlatformTransactionManager transactionManager;
     private NamedParameterJdbcTemplate namedParameterJdbcTemplate;
 
     private final static String INSERT_BOOK = "insert into books (id, title, author, summary, ownerid) values (:id, :title, :author, :summary, :ownerid)";
@@ -38,13 +36,39 @@ public class BookDAOImp implements BookDAO {
     private final static String SELECT_BYID = "select * from books where id=:id";
     private final static String SELECT_USER_BYID = "select * from users where id=:id";
     private final static String UPDATE_BOOK = "update books set ownerid=:ownerid where id=:id";
-    private final static String UPDATE_TAKE_BACK_BOOK = "update books set ownerid=:ownerid where id=:id";
     private final static String SELECT_HIRED_BOOKS = "select * from books where ownerid=:ownerid";
+
+    @Autowired
+    public void setDataSource(DataSource dataSource) {
+        namedParameterJdbcTemplate = new NamedParameterJdbcTemplate(dataSource);
+    }
+
+    @Autowired
+    public void setTransactionManager(PlatformTransactionManager transactionManager) {
+        this.transactionManager = transactionManager;
+    }
+
+    private TransactionStatus getTransactionStatus() {
+        TransactionDefinition transactionDefinition = new DefaultTransactionDefinition();
+        TransactionStatus status = transactionManager.getTransaction(transactionDefinition);
+        return status;
+    }
 
     @Override
     public boolean login(int userId) {
-        SqlParameterSource namedParameters = new MapSqlParameterSource().addValue("id", userId);
-        Map<String, Object> map = namedParameterJdbcTemplate.queryForMap(SELECT_USER_BYID, namedParameters);
+        TransactionStatus status = getTransactionStatus();
+        Map<String, Object> map = new HashMap<String, Object>();
+        try {
+            SqlParameterSource namedParameters = new MapSqlParameterSource().addValue("id", userId);
+            map = namedParameterJdbcTemplate.queryForMap(SELECT_USER_BYID, namedParameters);
+            
+            // commit
+            transactionManager.commit(status);
+        } catch (Exception e) {
+            System.out.println(e.getMessage());
+            System.out.println("rollback...");
+            transactionManager.rollback(status);
+        }
 
         return !map.isEmpty();
     }
